@@ -110,7 +110,7 @@ impl T4aServer {
         if let Some(r) = p.rows { req["rows"] = r.into(); }
         if let Some(cmd) = p.command { req["cmd_args"] = cmd.into(); }
         if let Some(cwd) = p.cwd { req["cwd"] = cwd.into(); }
-        if let Some(env) = p.env { req["env"] = serde_json::to_value(env).unwrap(); }
+        if let Some(env) = p.env { req["env"] = serde_json::to_value(env).unwrap_or_default(); }
         match client::request(&req).await {
             Ok(v) => text_result(v.to_string()),
             Err(e) => error_result(e.to_string()),
@@ -150,7 +150,7 @@ impl T4aServer {
         Parameters(p): Parameters<IdParam>,
     ) -> Result<CallToolResult, ErrorData> {
         match client::screenshot(&p.id).await {
-            Ok((_header, png)) => {
+            Ok(png) => {
                 let b64 = BASE64.encode(&png);
                 Ok(CallToolResult::success(vec![Content::image(b64, "image/png")]))
             }
@@ -205,11 +205,14 @@ impl T4aServer {
         }
     }
 
-    #[tool(description = "Wait for a terminal event. Blocks until the event fires or timeout. Use after sending a command to wait for completion. Events: command_done (shell finished, has exit code), idle (no output for 2s), activity (output resumed), exit (process died), bell, title.")]
+    #[tool(description = "Wait for a terminal event. Returns when the event fires or timeout expires. Use after sending a command to wait for completion. Events: command_done (shell finished, has exit code), idle (no output for 2s), activity (output resumed), exit (process died), bell, title.")]
     async fn t4a_wait(
         &self,
         Parameters(p): Parameters<WaitParams>,
     ) -> Result<CallToolResult, ErrorData> {
+        if let Err(e) = client::validate_event_type(&p.event) {
+            return error_result(e.to_string());
+        }
         let timeout_ms = p.timeout_ms.unwrap_or(30000);
         match client::wait_for_event(&p.id, &p.event, timeout_ms).await {
             Ok(v) => text_result(v.to_string()),
@@ -218,9 +221,9 @@ impl T4aServer {
     }
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    client::ensure_daemon().await;
+    client::ensure_daemon().await?;
     let server = T4aServer::new();
     let transport = rmcp::transport::io::stdio();
     let ct = server.serve(transport).await?;
