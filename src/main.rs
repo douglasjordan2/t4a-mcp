@@ -132,7 +132,7 @@ impl T4aServer {
     ) -> Result<CallToolResult, ErrorData> {
         let mut req = serde_json::json!({"cmd": "send", "id": p.id});
         if let Some(input) = p.input {
-            req["input"] = input.into();
+            req["input"] = client::unescape(&input).into();
         } else if let Some(b64) = p.input_base64 {
             req["input_base64"] = b64.into();
         } else {

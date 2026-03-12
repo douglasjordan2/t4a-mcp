@@ -10,6 +10,37 @@ const VALID_EVENTS: &[&str] = &[
     "command_done", "idle", "activity", "exit", "bell", "title",
 ];
 
+pub fn unescape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some('n') => out.push('\n'),
+                Some('t') => out.push('\t'),
+                Some('r') => out.push('\r'),
+                Some('\\') => out.push('\\'),
+                Some('e') => out.push('\x1b'),
+                Some('x') => {
+                    let hi = chars.next().unwrap_or('0');
+                    let lo = chars.next().unwrap_or('0');
+                    let mut hex = String::with_capacity(2);
+                    hex.push(hi);
+                    hex.push(lo);
+                    if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                        out.push(byte as char);
+                    }
+                }
+                Some(other) => { out.push('\\'); out.push(other); }
+                None => out.push('\\'),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 fn socket_path() -> String {
     env::var("T4A_SOCKET").unwrap_or_else(|_| "/tmp/t4a.sock".into())
 }
